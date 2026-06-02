@@ -22,5 +22,6 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]string{
 		"status":  "ok",
 		"service": "go-learning",
+		"version": "0.1.0",
 	})
 }
