@@ -85,19 +85,21 @@ go run ./cmd/server
 
 1. 选择当天 GitHub Issue。
 2. 让 AI 根据 Issue 给出当天的核心任务和验收标准。
-3. 先独立实现核心任务。
-4. 卡住时让 AI 给提示，而不是直接给完整答案。
-5. 完成后运行格式化、测试和验证命令。
-6. 让 AI Review 今日代码。
-7. 和 AI 进行答疑解惑，确认今天的关键概念、易错点和工程实践。
-8. 让 AI 基于今日内容出 3-5 道小测试，并完成自测。
-9. 更新 `docs/daily/day-NN.md`，记录代码产出、问题、答案和测试结果。
-10. 提交当天成果。
+3. 让 AI 根据核心任务和验收标准生成学习教案，并保存到 `docs/daily/day-NN-lesson.md`。
+4. 学习教案内容，过程中随时向 AI 提问，AI 负责答疑并补充易错点。
+5. 学习完成后，和 AI 确认今天要实践的最小代码任务和可选挑战题。
+6. 先独立实现核心任务；卡住时让 AI 给提示，而不是直接给完整答案。
+7. 完成后运行格式化、测试和验证命令。
+8. 让 AI Review 今日代码，重点检查 Go 风格、错误处理、测试和工程结构。
+9. 让 AI 基于今日知识和代码实践出 3-5 道小测试，并完成自测。
+10. 更新 `docs/daily/day-NN.md`，记录代码产出、问题、答案、测试结果和关键收获。
+11. 提交当天成果，并在确认完成后关闭对应 GitHub Issue。
 
 ## 跟踪文档
 
 - 学习计划：`GO_LEARN_PLAN.md`
-- 每日记录：`docs/daily/`
+- 每日教案：`docs/daily/day-NN-lesson.md`
+- 每日记录：`docs/daily/day-NN.md`
 - 每周复盘：`docs/weekly/`
 - 架构说明：`docs/architecture/todo-api.md`
 - API 文档：`docs/api/todo-api.md`
