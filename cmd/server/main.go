@@ -4,24 +4,34 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/CanYangTang/go_learning/pkg/response"
+	"github.com/CanYangTang/go_learning/internal/handler"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", healthHandler)
+	// Set Gin to release mode for production
+	gin.SetMode(gin.ReleaseMode)
 
+	// Create a new Gin router
+	router := gin.New()
+
+	// Create API v1 route group
+	v1 := router.Group("/api/v1")
+	{
+		v1.GET("/health", handler.HealthHandler)
+	}
+		router.NoRoute(func(c *gin.Context) {
+    c.JSON(http.StatusNotFound, gin.H{
+        "error": "not found",
+    })
+})
+
+	// Start the server
 	addr := ":8080"
 	log.Printf("server listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := router.Run(addr); err != nil {
 		log.Fatal(err)
 	}
-}
 
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	response.JSON(w, http.StatusOK, map[string]string{
-		"status":  "ok",
-		"service": "go-learning",
-		"version": "0.1.0",
-	})
+
 }
