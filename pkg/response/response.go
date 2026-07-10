@@ -32,3 +32,24 @@ func writeJSON(w http.ResponseWriter, statusCode int, body any) {
 	w.WriteHeader(statusCode)
 	_ = json.NewEncoder(w).Encode(body)
 }
+
+// GinJSON writes a JSON response using gin.Context.
+func GinJSON(c any, statusCode int, data any) {
+	// Type assertion for gin.Context
+	type ginContext interface {
+		JSON(code int, obj any)
+	}
+	if gc, ok := c.(ginContext); ok {
+		gc.JSON(statusCode, Body{Data: data, Message: "ok"})
+	}
+}
+
+// GinError writes an error response using gin.Context.
+func GinError(c any, statusCode int, code, message string) {
+	type ginContext interface {
+		JSON(code int, obj any)
+	}
+	if gc, ok := c.(ginContext); ok {
+		gc.JSON(statusCode, ErrorBody{Error: ErrorPayload{Code: code, Message: message}})
+	}
+}

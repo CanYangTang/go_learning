@@ -20,11 +20,11 @@ func main() {
 	{
 		v1.GET("/health", handler.HealthHandler)
 	}
-		router.NoRoute(func(c *gin.Context) {
-    c.JSON(http.StatusNotFound, gin.H{
-        "error": "not found",
-    })
-})
+	router.NoRoute(func(c *gin.Context) {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "not found",
+		})
+	})
 
 	// Start the server
 	addr := ":8080"
@@ -32,6 +32,5 @@ func main() {
 	if err := router.Run(addr); err != nil {
 		log.Fatal(err)
 	}
-
 
 }
