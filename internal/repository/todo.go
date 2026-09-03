@@ -12,7 +12,6 @@ type TodoRepository struct {
 
 // NewTodoRepository creates a new TodoRepository.
 func NewTodoRepository(db *gorm.DB) *TodoRepository {
-	// TODO: implement
 	return &TodoRepository{
 		db: db,
 	}
@@ -20,7 +19,6 @@ func NewTodoRepository(db *gorm.DB) *TodoRepository {
 
 // Create inserts a new todo and sets the ID.
 func (r *TodoRepository) Create(todo *model.Todo) error {
-	// TODO: implement using r.db.Create(todo).Error
 	err := r.db.Create(todo).Error
 	if err != nil {
 		return err
@@ -30,8 +28,6 @@ func (r *TodoRepository) Create(todo *model.Todo) error {
 
 // FindByID retrieves a todo by ID. Returns nil if not found.
 func (r *TodoRepository) FindByID(id uint) (*model.Todo, error) {
-	// TODO: implement using r.db.First(&todo, id).Error
-	// Handle gorm.ErrRecordNotFound by returning nil, nil
 	var todo model.Todo
 	err := r.db.First(&todo, id).Error
 	if err != nil {
@@ -45,7 +41,6 @@ func (r *TodoRepository) FindByID(id uint) (*model.Todo, error) {
 
 // FindAll retrieves all todos.
 func (r *TodoRepository) FindAll() ([]model.Todo, error) {
-	// TODO: implement using r.db.Find(&todos).Error
 	var todos []model.Todo
 	err := r.db.Find(&todos).Error
 	if err != nil {
@@ -56,7 +51,6 @@ func (r *TodoRepository) FindAll() ([]model.Todo, error) {
 
 // Update modifies an existing todo.
 func (r *TodoRepository) Update(todo *model.Todo) error {
-	// TODO: implement using r.db.Save(todo).Error
 	err := r.db.Save(todo).Error
 	if err != nil {
 		return err
@@ -66,7 +60,6 @@ func (r *TodoRepository) Update(todo *model.Todo) error {
 
 // Delete removes a todo by ID.
 func (r *TodoRepository) Delete(id uint) error {
-	// TODO: implement using r.db.Delete(&model.Todo{}, id).Error
 	err := r.db.Delete(&model.Todo{}, id).Error
 	if err != nil {
 		return err
@@ -76,8 +69,6 @@ func (r *TodoRepository) Delete(id uint) error {
 
 // CreateAndMarkDone creates a todo and marks it done in a transaction.
 func (r *TodoRepository) CreateAndMarkDone(todo *model.Todo) error {
-	// TODO: optional challenge
-	// Use r.db.Transaction(func(tx *gorm.DB) error { ... })
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		err := tx.Create(todo).Error
 		if err != nil {

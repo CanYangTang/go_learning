@@ -65,15 +65,26 @@ curl -sS -D - -X OPTIONS http://127.0.0.1:8080/api/v1/health -H 'Origin: http://
 
 1. `RequestID` middleware 的职责是什么？
    - 回答：从请求头读取 `X-Request-ID`，没有就生成一个新的 ID，写入 Gin context 和响应头，方便后续链路追踪。
-   - 结果：待批改。
+   - 结果：正确。
+   - 标准答案：同上。补一个实现细节：读取时要 `strings.TrimSpace` 后判空，客户端传了值就复用，不要覆盖；ID 要同时写进 context（给后续 middleware 和 handler 用）和响应头（给客户端和日志系统用），少写哪一边都会让链路断掉。
 2. 为什么 `Logging` middleware 要在 `c.Next()` 之后记录状态码和耗时？
-   - 回答：待批改。
+   - 回答：`c.Next()` 会先执行后续中间件和具体 handler。执行完成后，Logging 才能拿到最终的响应状态码、完整请求路径和整个请求的耗时；如果放在 `c.Next()` 之前，只能记录请求开始时的信息，拿不到最终结果。
+   - 结果：基本正确，有一处细节需要修正。
+   - 标准答案：状态码和耗时必须放在 `c.Next()` 之后 —— 之前调用 `c.Writer.Status()` 只会拿到默认的 200，而不是 handler 最终写入的值，耗时也只能是 0。但**请求路径在 `c.Next()` 之前就能取到**，它来自 `c.Request.URL`，不依赖 handler 执行。正确的写法是 `start := time.Now()` 放在前面，`status`、`latency` 的读取放在后面。
 3. CORS 为什么要特殊处理 `OPTIONS` 请求？
-   - 回答：待批改。
+   - 回答：浏览器在发送某些跨域请求前会先发送 `OPTIONS` 预检请求，用来确认服务端是否允许对应的 method 和 headers。CORS middleware 设置相关响应头后直接返回 `204 No Content`，并通过 `Abort` 停止继续执行业务 handler，避免预检请求误进入业务逻辑。
+   - 结果：正确。
+   - 标准答案：同上。补两点：一是预检只在非简单请求时触发（自定义头、`PUT`/`DELETE`、非表单 Content-Type 等），简单 `GET` 不会预检；二是预检响应不应带 body，`204 No Content` 正合适，而且它必须走在鉴权之前，否则浏览器会因为预检被 401 拦下而报跨域错误。
 4. `AuthPlaceholder` 现在的作用是什么？
-   - 回答：待批改。
+   - 回答：它是鉴权中间件的占位实现，目前只调用 `c.Next()` 放行请求，不校验 Token 或阻止访问。这样可以先预留统一的鉴权接入位置，未来再在不修改路由注册方式的情况下补充 JWT 等认证逻辑。
+   - 结果：正确。
+   - 标准答案：同上。补一句边界：真正的 JWT 是 Day 25 的内容，届时它不会挂在全局 `router.Use` 上，而是挂到需要保护的路由组，因为 `/api/v1/health` 必须保持公开。
 5. `curl` 验证 middleware 时，最值得检查哪些响应头？
-   - 回答：待批改。
+   - 回答：重点检查 `X-Request-ID` 是否存在并能在请求头传入时被复用；`Access-Control-Allow-Origin`、`Access-Control-Allow-Methods` 和 `Access-Control-Allow-Headers` 是否正确；如果需要让前端读取请求 ID，还要检查 `Access-Control-Expose-Headers: X-Request-ID`。发送 `OPTIONS` 请求时，还应确认状态码为 `204`。
+   - 结果：正确，回答很完整。
+   - 标准答案：同上。补一个实测中会踩的点：Go 的 `http.Header` 会把 header 名规范化成 `X-Request-Id`（首字母大写、其余小写），所以 `curl -D -` 里看到的是 `X-Request-Id` 而不是代码里写的 `X-Request-ID`。HTTP header 名本身大小写不敏感，不影响功能，但写断言时别按字面比较。
+
+得分：5 题全部答对，第 2 题有一处细节偏差（请求路径不需要等 `c.Next()`）。
 
 ## 测试结果
 
@@ -85,6 +96,9 @@ curl -sS -D - -X OPTIONS http://127.0.0.1:8080/api/v1/health -H 'Origin: http://
 
 - `RequestID` 的兜底值一开始写得不合适，已经改为固定字符串 `request-id`。
 - `internal/middleware/request_id.go` 的 `net/http` 导入是误加的，已移除。
+- 流程问题：middleware 代码由 AI 直接写完，没有先给空骨架再由本人填充，缺了代码巩固环节。Day 20 已按正确流程执行。
+- 流程问题：小测试当时未实际作答就提交并关闭了 Issue，事后补答补批改（本节结果为补充后的最终版本）。
+- 明日计划原先误写为「用户与认证」，已修正为分层架构（用户与认证是 Day 23）。
 
 ## 关键收获
 
@@ -96,4 +110,4 @@ curl -sS -D - -X OPTIONS http://127.0.0.1:8080/api/v1/health -H 'Origin: http://
 
 ## 明日计划
 
-- 进入 Day 20：开始用户与认证相关内容。
+- 进入 Day 20：重构为 handler/service/repository 分层架构。

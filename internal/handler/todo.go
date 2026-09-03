@@ -1,13 +1,23 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
+	"github.com/CanYangTang/go_learning/internal/model"
+	"github.com/CanYangTang/go_learning/pkg/apperror"
 	"github.com/CanYangTang/go_learning/pkg/response"
 	"github.com/gin-gonic/gin"
 )
 
-// Todo represents a todo item.
+// TodoService is the business contract the handler depends on.
+// Same rule as in the service package: the consumer declares the interface.
+type TodoService interface {
+	CreateTodo(title string) (*model.Todo, error)
+	ListTodos() ([]model.Todo, error)
+}
+
+// Todo is the JSON shape returned to clients.
 type Todo struct {
 	ID    uint   `json:"id"`
 	Title string `json:"title"`
@@ -21,43 +31,69 @@ type CreateTodoRequest struct {
 
 // TodoHandler handles todo-related HTTP requests.
 type TodoHandler struct {
-	// TODO: inject service or repository later
+	service TodoService
 }
 
 // NewTodoHandler creates a new TodoHandler.
-func NewTodoHandler() *TodoHandler {
-	return &TodoHandler{}
+func NewTodoHandler(service TodoService) *TodoHandler {
+	return &TodoHandler{service: service}
 }
 
 // CreateTodo handles POST /api/v1/todos.
 func (h *TodoHandler) CreateTodo(c *gin.Context) {
 	var req CreateTodoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, response.ErrorBody{
-			Error: response.ErrorPayload{
-				Code:    "INVALID_REQUEST",
-				Message: err.Error(),
-			},
-		})
+		writeError(c, apperror.Validation(err.Error()))
 		return
 	}
 
-	todo := Todo{
-		Title: req.Title,
-		Done:  false,
+	// Pass the raw title through - trimming is the service's job.
+	todo, err := h.service.CreateTodo(req.Title)
+	if err != nil {
+		writeError(c, err)
+		return
 	}
 
-	c.JSON(http.StatusCreated, response.Body{
-		Data:    todo,
-		Message: "ok",
-	})
+	c.JSON(http.StatusCreated, response.Body{Data: newTodoResponse(*todo), Message: "ok"})
 }
 
 // ListTodos handles GET /api/v1/todos.
 func (h *TodoHandler) ListTodos(c *gin.Context) {
-	todos := []Todo{}
-	c.JSON(http.StatusOK, response.Body{
-		Data:    todos,
-		Message: "ok",
+	todos, err := h.service.ListTodos()
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+
+	// Start from an empty slice so an empty list marshals to [] instead of null.
+	items := make([]Todo, 0, len(todos))
+	for _, todo := range todos {
+		items = append(items, newTodoResponse(todo))
+	}
+
+	c.JSON(http.StatusOK, response.Body{Data: items, Message: "ok"})
+}
+
+// newTodoResponse converts a domain model into the API response shape.
+func newTodoResponse(todo model.Todo) Todo {
+	return Todo{
+		ID:    todo.ID,
+		Title: todo.Title,
+		Done:  todo.Done,
+	}
+}
+
+// writeError turns an error into the shared error response envelope.
+func writeError(c *gin.Context, err error) {
+	var appErr apperror.Error
+	if errors.As(err, &appErr) {
+		c.JSON(appErr.StatusCode, response.ErrorBody{
+			Error: response.ErrorPayload{Code: appErr.Code, Message: appErr.Message},
+		})
+		return
+	}
+
+	c.JSON(http.StatusInternalServerError, response.ErrorBody{
+		Error: response.ErrorPayload{Code: "INTERNAL_ERROR", Message: "internal server error"},
 	})
 }
