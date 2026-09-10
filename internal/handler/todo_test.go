@@ -136,6 +136,60 @@ func TestCreateTodoMissingTitle(t *testing.T) {
 	assertBodyContains(t, recorder.Body.String(), `"code":"VALIDATION_ERROR"`)
 }
 
+// The bind error must not travel to the client verbatim. Before this test the
+// three cases below returned things like
+//
+//	"Key: 'CreateTodoRequest.Title' Error:Field validation for 'Title' failed..."
+//	"json: cannot unmarshal array into Go value of type handler.CreateTodoRequest"
+//
+// which hands out internal Go type names for free and tells a legitimate client
+// nothing it can act on.
+//
+// This asserts the absence of the leak rather than one exact wording, so the
+// message text stays a free choice.
+func TestCreateTodoDoesNotLeakBindErrorDetails(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"missing field", `{}`},
+		{"truncated json", `{"title":`},
+		{"wrong json type", `[]`},
+	}
+
+	leaks := []string{
+		"CreateTodoRequest",
+		"Field validation",
+		"cannot unmarshal",
+		"unexpected EOF",
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &fakeTodoService{}
+			router := newTodoRouter(svc)
+
+			recorder := postTodo(t, router, tc.body)
+
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+			}
+			assertBodyContains(t, recorder.Body.String(), `"code":"VALIDATION_ERROR"`)
+
+			body := recorder.Body.String()
+			for _, leak := range leaks {
+				if strings.Contains(body, leak) {
+					t.Fatalf("response body %q leaks internal detail %q", body, leak)
+				}
+			}
+
+			if svc.createCalls != 0 {
+				t.Fatalf("service should not be called when binding fails, got %d calls", svc.createCalls)
+			}
+		})
+	}
+}
+
 func TestCreateTodoMapsServiceValidationError(t *testing.T) {
 	svc := &fakeTodoService{createErr: apperror.Validation("title is required")}
 	router := newTodoRouter(svc)

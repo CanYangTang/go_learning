@@ -2,8 +2,10 @@ package handler
 
 import (
 	"errors"
+	"log"
 	"net/http"
 
+	"github.com/CanYangTang/go_learning/internal/middleware"
 	"github.com/CanYangTang/go_learning/internal/model"
 	"github.com/CanYangTang/go_learning/pkg/apperror"
 	"github.com/CanYangTang/go_learning/pkg/response"
@@ -43,7 +45,12 @@ func NewTodoHandler(service TodoService) *TodoHandler {
 func (h *TodoHandler) CreateTodo(c *gin.Context) {
 	var req CreateTodoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		writeError(c, apperror.Validation(err.Error()))
+		// err.Error() is the raw validator / json error: it names internal types
+		// such as CreateTodoRequest and tells a legitimate client nothing it can
+		// act on. Keep it server-side, keyed by request ID so a client-reported
+		// 400 can still be traced, and send a fixed message instead.
+		log.Printf("request_id=%s bind_error=%v", middleware.RequestIDFromContext(c), err)
+		writeError(c, apperror.Validation("invalid request body: title is required"))
 		return
 	}
 

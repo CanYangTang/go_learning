@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/CanYangTang/go_learning/internal/config"
@@ -36,7 +35,9 @@ func main() {
 	todoHandler := handler.NewTodoHandler(todoService)
 
 	router := gin.New()
-	router.Use(middleware.RequestID(), middleware.Logging(), middleware.CORS(), middleware.AuthPlaceholder())
+	// Recovery sits after Logging so a recovered panic still produces an access
+	// log line, and before CORS so the 500 keeps its cross-origin headers.
+	router.Use(middleware.RequestID(), middleware.Logging(), middleware.Recovery(), middleware.CORS(), middleware.AuthPlaceholder())
 
 	v1 := router.Group("/api/v1")
 	{
@@ -45,11 +46,7 @@ func main() {
 		v1.GET("/todos", todoHandler.ListTodos)
 	}
 
-	router.NoRoute(func(c *gin.Context) {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "not found",
-		})
-	})
+	router.NoRoute(handler.NotFoundHandler)
 
 	addr := ":8080"
 	log.Printf("server listening on %s", addr)

@@ -23,3 +23,8 @@ func Internal(message string) Error {
 func Validation(message string) Error {
 	return New("VALIDATION_ERROR", message, http.StatusBadRequest)
 }
+
+// NotFound builds the error returned for a missing resource or an unknown route.
+func NotFound(message string) Error {
+	return New("NOT_FOUND", message, http.StatusNotFound)
+}

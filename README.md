@@ -63,6 +63,48 @@
 └── go.mod
 ```
 
+## 本地启动
+
+`make run` 需要一个可连接的 MySQL，否则启动时直接 `log.Fatal` 退出。
+
+```bash
+# 1. 起数据库（Docker Desktop 或 colima 需先在运行）
+docker compose -f deployments/docker-compose.yml up -d
+
+# 2. 起服务，表由 AutoMigrate 自动创建
+make run
+```
+
+默认 DSN 写在 `internal/config/gorm.go`（仅供本地开发），可用环境变量覆盖：
+
+```bash
+DB_DSN='user:pass@tcp(127.0.0.1:3306)/dbname?charset=utf8mb4&parseTime=True&loc=Local' make run
+```
+
+验证：
+
+```bash
+# 健康检查（注意路径带 /api/v1 前缀）
+curl -s http://localhost:8080/api/v1/health
+
+# 创建
+curl -s -X POST http://localhost:8080/api/v1/todos \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"learn go"}'
+
+# 列表
+curl -s http://localhost:8080/api/v1/todos
+
+# 未知路由，返回统一错误信封
+curl -s http://localhost:8080/health
+
+# 看请求 ID 和跨域响应头
+curl -s -D- -o /dev/null -H 'Origin: https://example.com' \
+  http://localhost:8080/api/v1/health
+```
+
+接口的完整说明见 `docs/api/todo-api.md`。
+
 ## 常用命令
 
 ```bash
@@ -103,3 +145,4 @@ go run ./cmd/server
 - 每周复盘：`docs/weekly/`
 - 架构说明：`docs/architecture/todo-api.md`
 - API 文档：`docs/api/todo-api.md`
+- 问题清单：`docs/issues-backlog.md`
