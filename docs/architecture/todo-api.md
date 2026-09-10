@@ -1,7 +1,7 @@
 # TODO API 架构说明
 
 > 「规划」小节写的是最终形态，「当前状态」小节写的是 `main` 分支上真实存在的东西。
-> 最后核对：2026-09-08（Day 21）
+> 最后核对：2026-09-09（Day 22）
 
 ## 项目目标
 
@@ -94,7 +94,7 @@ MySQL
 | UpdatedAt | time.Time | 更新时间 |
 | DeletedAt | gorm.DeletedAt | 软删除标记，带索引，JSON 中隐藏 |
 
-表结构由 `db.AutoMigrate(&model.Todo{})` 在启动时创建，`deployments/migrations/001_create_todos.sql` 目前是另一份**不一致且从未执行**的定义（`docs/issues-backlog.md` C2，Day 22 处理）。
+表结构由 `db.AutoMigrate(&model.Todo{})` 在启动时创建，是唯一的 schema 权威来源。`deployments/migrations/001_create_todos.sql` 已删除（Day 22，见下方「Day 22 设计决策」）。
 
 ### 三条设计决策（Day 20 确立）
 
@@ -116,34 +116,57 @@ MySQL
 - `internal/handler` 不 import `gorm`。
 - 依赖方向单向向下，下层不 import 上层。
 
+## Day 22 设计决策
+
+### TODO 状态：保留 `Done bool`
+
+架构文档曾规划 `Status string`（pending/done），代码从 Day 18 起一直是 `Done bool`，两边独立生长了三周没人核对过。今天定案：**保留 `Done bool`**。
+
+理由是 YAGNI：`Status string` 换来的唯一好处是给「多状态」留余地，但三周的实际使用和 `docs/api/todo-api.md` 规划的接口里都没出现过第三种状态的场景。为一个假设的未来需求现在就承担迁移成本（`done bool` → `status string` 需要一次数据迁移和全链路改字段），并把字段类型从编译期检查的 `bool` 退化成允许任意字符串的 `string`，不划算。如果将来真的出现第三种状态，那时候的迁移输入更明确——会知道具体要加哪个状态、如何与现有两个状态共存，而不是像今天这样凭空猜一个二元占位。
+
+### Schema 权威来源：`AutoMigrate`，迁移脚本已删除
+
+`deployments/migrations/001_create_todos.sql` 缺 `deleted_at`（`model.Todo` 用了 `gorm.DeletedAt`），且从未被执行过——`cmd/server/main.go` 和 `internal/repository/todo_test.go` 建表都是调 `AutoMigrate(&model.Todo{})`。今天决定：**`model.Todo` 的 struct tag + `AutoMigrate` 是唯一 schema 来源，`001_create_todos.sql` 已删除**。
+
+保留一份不一致且从未执行的 SQL 文件只会让下一个读到它的人误以为它是权威定义。已知代价（现在就写明，不留到真正撞见才发现）：`AutoMigrate` 只建表、加字段、加缺失索引，不处理删除列、重命名、类型变更，也没有版本记录和回滚。项目至今只加过字段没删过列，这些限制暂时不构成问题；如果将来需要删除/重命名列，需要重新评估是否引入正式迁移工具。
+
+### `User` 表设计（Day 23 创建）
+
+```go
+type User struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	Email        string    `gorm:"size:255;not null;uniqueIndex" json:"email"`
+	PasswordHash string    `gorm:"size:255;not null" json:"-"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+```
+
+- `Email` 加 `uniqueIndex`：注册时的唯一性用数据库约束兜底，避免并发注册时应用层查重的竞态窗口。
+- `PasswordHash` 用 `json:"-"`：绝不出现在任何 API 响应里，和 `Todo.DeletedAt` 同一模式。
+- 不带软删除：`Todo` 的软删除是因为用户随手删除的项可能要恢复；账号删除是更重的操作，Day 23-25 都不涉及，需要时再加。
+- `Todo.UserID` 外键**不在今天加**：它属于最终形态（见下方「TODO（最终形态）」），但要等 Day 25 JWT 落地、有「当前登录用户」概念之后才有值可写。现在加只是制造一个看起来有关联但实际没用的字段。
+
 ## 核心模型规划
 
-以下是最终形态，**尚未实现**。
+以下是最终形态，**尚未实现**（`User` 的表结构已在上方「Day 22 设计决策」定案，这里保留的是它在整体规划里的位置）。
 
-### User（Day 25）
+### User（Day 23）
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| ID | uint | 主键 |
-| Email | string | 邮箱，唯一 |
-| PasswordHash | string | 哈希后的密码 |
-| CreatedAt | time.Time | 创建时间 |
-| UpdatedAt | time.Time | 更新时间 |
+结构已在「Day 22 设计决策」中定案，见上方 `User` 结构体。
 
 ### TODO（最终形态）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | ID | uint | 主键 |
-| UserID | uint | 所属用户 |
+| UserID | uint | 所属用户，Day 25（JWT 落地后）才添加，见「Day 22 设计决策」 |
 | Title | string | 标题 |
 | Description | string | 描述 |
-| Status | string | 状态：pending/done |
+| Status | string | ~~状态：pending/done~~ 已决策保留 `Done bool`，不引入此字段，见「Day 22 设计决策」 |
 | DueDate | *time.Time | 截止日期 |
 | CreatedAt | time.Time | 创建时间 |
 | UpdatedAt | time.Time | 更新时间 |
-
-这里的 `Status string` 与当前实现的 `Done bool` 冲突，二选一的决策留到 Day 22（`docs/issues-backlog.md` D3）。
 
 ## 统一响应规划
 

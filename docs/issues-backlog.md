@@ -22,14 +22,14 @@ Day 21（2026-09-03）对整个项目做了一次全量审计，本文件是结�
 | B3 | repository 四个方法无调用方 | P3 | 24 | 观察 |
 | B4 | `health_test.go` 手写了 `strings.Contains` | P3 | 27 | 待修 |
 | C1 | `go.mod` 未 tidy，四个直接依赖被标成 `// indirect` | P2 | 21 | 已修 (Day 21) |
-| C2 | 迁移脚本与模型不一致，且从未被执行 | P2 | 22 | 待修 |
+| C2 | 迁移脚本与模型不一致，且从未被执行 | P2 | 22 | 已修 (Day 22) |
 | C3 | `make test` 无 `-count=1`；`fmt` 管不了 import 分组；无 lint | P2 | 27 | 待修 |
 | C4 | `pkg/apperror`、`pkg/response` 无测试 | P3 | 21 / 24 | 部分已修 (Day 21) |
 | C5 | 集成测试硬编码 DSN，teardown 会 `DROP TABLE` | P2 | 22 | 待修 |
 | C6 | `week02-core` 里残留 8 处 `// TODO: implement` 脚手架注释 | P3 | 27 | 待修 |
 | D1 | `docs/api/todo-api.md` 描述了 7 个不存在的接口，6 处形状不符 | P1 | 21 | 已修 (Day 21) |
 | D2 | `docs/architecture/todo-api.md` 三处过时描述 | P1 | 21 | 已修 (Day 21) |
-| D3 | 设计冲突：文档 `Status string` vs 代码 `Done bool` | P2 | 22 决策 | 待定 |
+| D3 | 设计冲突：文档 `Status string` vs 代码 `Done bool` | P2 | 22 决策 | 已决策 (Day 22) |
 | D4 | README 的 `make run` 已经跑不起来，且无 endpoint 示例 | P1 | 21 | 已修 (Day 21) |
 | D5 | `DB_DSN` 零处文档记录，无 `.env.example` | P2 | 26 | 部分已修 (Day 21) |
 | E1 | `docs/weekly/week-02.md` 无人负责（计划漏洞） | P3 | 21 | 已修 (Day 21) |
@@ -111,11 +111,13 @@ Day 21（2026-09-03）对整个项目做了一次全量审计，本文件是结�
 
 `go mod tidy -diff` 确认：`github.com/gin-gonic/gin`、`github.com/go-sql-driver/mysql`、`gorm.io/driver/mysql`、`gorm.io/gorm` 四个**直接**依赖全被标成了 `// indirect`。`go.sum` 也缺几行。一条 `go mod tidy` 解决。
 
-### C2 — 迁移脚本与模型不一致（P2）
+### C2 — 迁移脚本与模型不一致（P2，已修 Day 22）
 
 `deployments/migrations/001_create_todos.sql` 只有 `id/title/done/created_at/updated_at`，缺 `deleted_at`；而 `internal/model/todo.go:16` 用了 `gorm.DeletedAt`。
 
-更根本的问题是：实际建表靠 `cmd/server/main.go:30` 的 `AutoMigrate`，这个 SQL 文件从来没有被执行过。项目现在有两套 schema 来源，其中一套是死的。Day 22 要决定以哪套为准。
+更根本的问题是：实际建表靠 `cmd/server/main.go:30` 的 `AutoMigrate`，这个 SQL 文件从来没有被执行过。项目曾经有两套 schema 来源，其中一套是死的。
+
+**决策（Day 22）**：`model.Todo` 的 struct tag + `AutoMigrate` 是唯一 schema 来源，`001_create_todos.sql` 已删除。已知代价写进了 `docs/architecture/todo-api.md`「Day 22 设计决策」：不处理删除列/重命名/类型变更，无版本记录和回滚。
 
 ### C3 — 构建命令的三个缺口（P2）
 
@@ -156,9 +158,11 @@ teardown 里执行 `DROP TABLE IF EXISTS todos`（`:38`），每个用例开头�
 
 要补的是 Day 20 定下但一个字都没记录的三条设计决策：依赖方向单向、接口定义在调用方、依赖只在 `main` 组装。这三条是整个项目可测性的来源，不写进文档，下次重构就会被破坏。
 
-### D3 — 设计冲突：`Status string` vs `Done bool`（P2，待决策）
+### D3 — 设计冲突：`Status string` vs `Done bool`（P2，已决策 Day 22）
 
-架构文档规划 TODO 状态是 `Status string`（pending/done），代码已经落成了 `Done bool`。这不是漂移，是一个还没做的决定。选 `status` 就要写数据迁移；保留 `done` 就要改文档并放弃「多状态」这个设想。Day 22（数据库设计）必须二选一。
+架构文档规划 TODO 状态是 `Status string`（pending/done），代码已经落成了 `Done bool`。这不是漂移，是一个之前没做的决定。
+
+**决策（Day 22）**：保留 `Done bool`。理由是 YAGNI —— 三周的实际使用和 API 文档规划的接口里都没出现过需要第三种状态的场景，为假设的未来需求现在承担迁移成本和字段类型退化不划算。理由和两条路线的代价对比记在 `docs/architecture/todo-api.md`「Day 22 设计决策」。
 
 ### D4 — README 的启动说明已失效（P1）
 
@@ -208,6 +212,15 @@ Day 21 的第一件事就是补这个，关键检查是重启服务后数据还�
 | E3 | 端到端真实跑通：`docker compose up -d` + 起服务，健康检查 / POST / GET / 400 / 404 / 预检 / request ID 全部实测，**重启服务后数据仍在** | 记录见 `docs/daily/day-21.md` |
 
 顺带发现（Day 21）：`:8080` 上还挂着一个 9 月 3 日 `make run` 留下的旧进程，新编译的二进制起不来（`bind: address already in use`），第一轮 curl 全打在了旧代码上，A3 看起来像没修。教训是验证前先确认端口上跑的是哪个二进制。
+
+### Day 22（2026-09-09）
+
+| 编号 | 结果 | 落地位置 |
+|------|------|----------|
+| D3 | 决策：保留 `Done bool`，理由是 YAGNI（三周内无第三种状态的真实需求） | `docs/architecture/todo-api.md`「Day 22 设计决策」 |
+| C2 | 决策：`AutoMigrate` 为唯一 schema 来源，删除不一致且从未执行的 `001_create_todos.sql` | `docs/architecture/todo-api.md`「Day 22 设计决策」，`deployments/migrations/` 已删除 |
+
+顺带完成：`User` 表设计定案（`Email` 唯一索引、`PasswordHash` 隐藏于 JSON、不带软删除），`UserID` 外键明确留到 Day 25（JWT 落地后才有值可写）。
 
 
 
