@@ -22,12 +22,12 @@ func TestMain(m *testing.M) {
 	dsn := "root:password@tcp(127.0.0.1:3306)/go_learning?charset=utf8mb4&parseTime=True&loc=Local"
 
 	var err error
-	testDB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	testDB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{TranslateError: true})
 	if err != nil {
 		panic("failed to connect to database: " + err.Error())
 	}
 
-	if err := testDB.AutoMigrate(&model.Todo{}); err != nil {
+	if err := testDB.AutoMigrate(&model.Todo{}, &model.User{}); err != nil {
 		panic("failed to migrate database: " + err.Error())
 	}
 
@@ -36,6 +36,7 @@ func TestMain(m *testing.M) {
 	sqlDB, err := testDB.DB()
 	if err == nil {
 		testDB.Exec("DROP TABLE IF EXISTS todos")
+		testDB.Exec("DROP TABLE IF EXISTS users")
 		sqlDB.Close()
 	}
 	os.Exit(code)

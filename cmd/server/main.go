@@ -26,13 +26,17 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := db.AutoMigrate(&model.Todo{}); err != nil {
+	if err := db.AutoMigrate(&model.Todo{}, &model.User{}); err != nil {
 		log.Fatal(err)
 	}
 
 	todoRepo := repository.NewTodoRepository(db)
 	todoService := service.NewTodoService(todoRepo)
 	todoHandler := handler.NewTodoHandler(todoService)
+
+	userRepo := repository.NewUserRepository(db)
+	userService := service.NewUserService(userRepo)
+	userHandler := handler.NewUserHandler(userService)
 
 	router := gin.New()
 	// Recovery sits after Logging so a recovered panic still produces an access
@@ -44,6 +48,8 @@ func main() {
 		v1.GET("/health", handler.HealthHandler)
 		v1.POST("/todos", todoHandler.CreateTodo)
 		v1.GET("/todos", todoHandler.ListTodos)
+		v1.POST("/users/register", userHandler.Register)
+		v1.POST("/users/login", userHandler.Login)
 	}
 
 	router.NoRoute(handler.NotFoundHandler)

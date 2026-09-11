@@ -5,14 +5,14 @@
 > - **已实现**：当前 `main` 分支上真实跑得通的接口，示例响应都是从运行中的服务上抓下来的。改代码时必须同步改这一节。
 > - **计划中**：设计意图，尚未落地。不要照着它写客户端。
 >
-> 最后核对：2026-09-08（Day 21，逐条 curl 验证）
+> 最后核对：2026-09-11（Day 23，逐条 curl 验证）
 
 ## 基础信息
 
 - Base URL：`http://localhost:8080`
 - API Prefix：`/api/v1`
 - 依赖：MySQL（启动方式见 README 的「本地启动」）
-- 认证：**当前没有**。`AuthPlaceholder` 中间件已挂在全局，但不做任何校验，所有接口都是公开的。JWT 在 Day 25 实现。
+- 认证：**当前没有**。`AuthPlaceholder` 中间件已挂在全局，但不做任何校验，所有接口都是公开的。JWT 在 Day 25 实现，`register`/`login` 现在也不发 token。
 
 ## 全局约定
 
@@ -143,18 +143,94 @@ handler 内 panic 时由 `Recovery` 中间件兜住，响应 `500`：
 
 panic 值和调用栈只写日志，按 `request_id` 关联。
 
+## POST /api/v1/users/register
+
+认证：不需要。
+
+请求体：
+
+```json
+{ "email": "a@example.com", "password": "hunter2" }
+```
+
+`email`、`password` 均必填。密码用 `bcrypt` 哈希后存储，`PasswordHash` 永不出现在任何响应里。
+
+响应 `201`：
+
+```json
+{
+  "data": { "id": 1, "email": "a@example.com" },
+  "message": "ok"
+}
+```
+
+失败 `400`（邮箱已注册）：
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "email already registered"
+  }
+}
+```
+
+邮箱唯一性有两层保证：应用层先查一次（给出上面这个错误信息），数据库的 `uniqueIndex` 兜底并发场景下的竞态。两层触发的错误信息相同，客户端无法区分是哪一层拦下的。
+
+密码超过 72 字节（`bcrypt` 的硬限制）也返回 `400`：
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "password is too long"
+  }
+}
+```
+
+## POST /api/v1/users/login
+
+认证：不需要。
+
+请求体：
+
+```json
+{ "email": "a@example.com", "password": "hunter2" }
+```
+
+响应 `200`：
+
+```json
+{
+  "data": { "id": 1, "email": "a@example.com" },
+  "message": "ok"
+}
+```
+
+不发 token——Day 25 JWT 落地后才会在 `data` 里加 `token` 字段。
+
+失败 `400`：
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "invalid email or password"
+  }
+}
+```
+
+**邮箱不存在和密码错误返回完全相同的错误**（同一个 `message`、同一个状态码），刻意如此：区分两者会让攻击者可以用一份邮箱字典探测出哪些邮箱在系统里注册过。
+
 ---
 
 # 二、计划中
 
 以下接口**尚未实现**，字段和形状都可能变。
 
-## 用户接口（Day 25）
+## 用户接口鉴权（Day 25）
 
-- `POST /api/v1/users/register`：`{ "email", "password" }` → `{ "data": { "id", "email" }, "message": "ok" }`
-- `POST /api/v1/users/login`：`{ "email", "password" }` → `{ "data": { "token" }, "message": "ok" }`
-
-登录后 TODO 接口需要带 `Authorization: Bearer <token>`，并按 `user_id` 隔离数据。
+`register`/`login` 已在 Day 23 实现（见上）。Day 25 会在 `login` 成功响应里加 `token` 字段，TODO 接口需要带 `Authorization: Bearer <token>`，并按 `user_id` 隔离数据。
 
 ## TODO 接口补全（Day 22-24）
 

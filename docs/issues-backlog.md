@@ -222,5 +222,9 @@ Day 21 的第一件事就是补这个，关键检查是重启服务后数据还�
 
 顺带完成：`User` 表设计定案（`Email` 唯一索引、`PasswordHash` 隐藏于 JSON、不带软删除），`UserID` 外键明确留到 Day 25（JWT 落地后才有值可写）。
 
+### Day 23（2026-09-11）
+
+实现 `POST /api/v1/users/register`、`POST /api/v1/users/login`：`internal/model/user.go`、`internal/service/user.go`、`internal/repository/user.go`、`internal/handler/user.go`。`internal/config/gorm.go` 加 `TranslateError: true`，让 `errors.Is(err, gorm.ErrDuplicatedKey)` 生效。端到端 curl 验证：注册成功 `201`、重复邮箱 `400`、登录密码正确 `200`、密码错误和邮箱不存在返回完全相同的 `400` + 错误信息。代码审查修复一处 bug：`Register` 里 `repo.Create` 失败时原先统一包成 `apperror.Internal`，丢掉了 repository 已翻译好的 `apperror.Validation`，并发重复邮箱注册会误判成 500，改用 `errors.As` 透传修复。`docs/api/todo-api.md` 补上两个接口的「已实现」条目。
+
 
 
