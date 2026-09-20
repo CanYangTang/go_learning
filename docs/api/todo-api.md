@@ -5,7 +5,7 @@
 > - **已实现**：当前 `main` 分支上真实跑得通的接口，示例响应都是从运行中的服务上抓下来的。改代码时必须同步改这一节。
 > - **计划中**：设计意图，尚未落地。不要照着它写客户端。
 >
-> 最后核对：2026-09-11（Day 23，逐条 curl 验证）
+> 最后核对：2026-09-20（Day 24，逐条 curl 验证）
 
 ## 基础信息
 
@@ -123,6 +123,74 @@
 
 列表为空时返回 `"data": []`，不是 `null`。
 
+## GET /api/v1/todos/{id}
+
+按 ID 查询单个 todo。
+
+响应 `200`：
+
+```json
+{
+  "data": { "id": 1, "title": "learn go", "done": false },
+  "message": "ok"
+}
+```
+
+不存在返回 `404`：
+
+```json
+{ "error": { "code": "NOT_FOUND", "message": "todo not found" } }
+```
+
+`id` 不是合法的无符号整数（如 `/todos/abc`、负数、溢出）返回 `400`：
+
+```json
+{ "error": { "code": "VALIDATION_ERROR", "message": "invalid id" } }
+```
+
+## PUT /api/v1/todos/{id}
+
+全量更新一个 todo 的 `title` 和 `done`。
+
+请求体：
+
+```json
+{ "title": "updated title", "done": true }
+```
+
+`title` 必填；`done` 可选，缺省为 `false`（`done` 不加 `required`——布尔字段的 `required` 会把合法的 `false` 误判为「未提供」）。
+
+响应 `200`：
+
+```json
+{
+  "data": { "id": 1, "title": "updated title", "done": true },
+  "message": "ok"
+}
+```
+
+不存在返回 `404`（**不会 upsert 出一条新记录**）：
+
+```json
+{ "error": { "code": "NOT_FOUND", "message": "todo not found" } }
+```
+
+`title` 为空或只有空白返回 `400`（`{"code":"VALIDATION_ERROR","message":"title is required"}`）；`title` 缺失或 JSON 非法返回 `400`（`invalid request body`）；非法 `id` 返回 `400`（`invalid id`）。
+
+## DELETE /api/v1/todos/{id}
+
+删除一个 todo（模型是软删除，`deleted_at` 打标记，后续查询自动过滤）。
+
+响应 `200`：
+
+```json
+{ "message": "ok" }
+```
+
+注意成功响应**没有 `data` 字段**：`data` 用了 `omitempty`，删除没有返回体，`Data` 为 `nil` 时被省掉。
+
+不存在返回 `404`（`{"code":"NOT_FOUND","message":"todo not found"}`）；非法 `id` 返回 `400`（`invalid id`）。删除后再 `GET /todos/{id}` 返回 `404`，列表里也不再出现。
+
 ## 未匹配的路由
 
 任何未注册的路径（任意 method）响应 `404`：
@@ -234,11 +302,7 @@ panic 值和调用栈只写日志，按 `request_id` 关联。
 
 ## TODO 接口补全（Day 22-24）
 
-| 接口 | 说明 |
-|------|------|
-| `GET /api/v1/todos/{id}` | 按 ID 查询 |
-| `PUT /api/v1/todos/{id}` | 全量更新 |
-| `DELETE /api/v1/todos/{id}` | 删除（模型已支持软删除） |
+`GET /todos/{id}`、`PUT /todos/{id}`、`DELETE /todos/{id}` 已在 Day 24 实现（见上「已实现」）。
 
 ## 列表分页与筛选（Day 24）
 

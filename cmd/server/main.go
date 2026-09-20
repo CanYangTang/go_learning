@@ -48,6 +48,9 @@ func main() {
 		v1.GET("/health", handler.HealthHandler)
 		v1.POST("/todos", todoHandler.CreateTodo)
 		v1.GET("/todos", todoHandler.ListTodos)
+		v1.GET("/todos/:id", todoHandler.GetTodo)
+		v1.PUT("/todos/:id", todoHandler.UpdateTodo)
+		v1.DELETE("/todos/:id", todoHandler.DeleteTodo)
 		v1.POST("/users/register", userHandler.Register)
 		v1.POST("/users/login", userHandler.Login)
 	}

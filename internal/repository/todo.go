@@ -59,12 +59,9 @@ func (r *TodoRepository) Update(todo *model.Todo) error {
 }
 
 // Delete removes a todo by ID.
-func (r *TodoRepository) Delete(id uint) error {
-	err := r.db.Delete(&model.Todo{}, id).Error
-	if err != nil {
-		return err
-	}
-	return nil
+func (r *TodoRepository) Delete(id uint) (int64, error) {
+	result := r.db.Delete(&model.Todo{}, id)
+	return result.RowsAffected, result.Error
 }
 
 // CreateAndMarkDone creates a todo and marks it done in a transaction.

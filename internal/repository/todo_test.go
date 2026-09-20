@@ -183,7 +183,7 @@ func TestTodoRepository_Delete(t *testing.T) {
 		t.Fatalf("Create failed: %v", err)
 	}
 
-	if err := repo.Delete(todo.ID); err != nil {
+	if _, err := repo.Delete(todo.ID); err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
 

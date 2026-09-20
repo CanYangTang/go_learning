@@ -19,7 +19,7 @@ Day 21（2026-09-03）对整个项目做了一次全量审计，本文件是结�
 | A7 | health 响应不走统一信封（项目里共 4 种响应形状） | P3 | 21 决策 | 已决策 (Day 21) |
 | B1 | `database/sql` 整条路径已成死代码 | P3 | 26 | 待修 |
 | B2 | `pkg/response` 四个函数零调用，`GinJSON`/`GinError` 模式错误 | P3 | 24 | 待修 |
-| B3 | repository 四个方法无调用方 | P3 | 24 | 观察 |
+| B3 | repository 四个方法无调用方 | P3 | 24 | 部分已修 (Day 24) |
 | B4 | `health_test.go` 手写了 `strings.Contains` | P3 | 27 | 待修 |
 | C1 | `go.mod` 未 tidy，四个直接依赖被标成 `// indirect` | P2 | 21 | 已修 (Day 21) |
 | C2 | 迁移脚本与模型不一致，且从未被执行 | P2 | 22 | 已修 (Day 22) |
@@ -222,9 +222,13 @@ Day 21 的第一件事就是补这个，关键检查是重启服务后数据还�
 
 顺带完成：`User` 表设计定案（`Email` 唯一索引、`PasswordHash` 隐藏于 JSON、不带软删除），`UserID` 外键明确留到 Day 25（JWT 落地后才有值可写）。
 
-### Day 23（2026-09-11）
+### Day 24（2026-09-20）
 
-实现 `POST /api/v1/users/register`、`POST /api/v1/users/login`：`internal/model/user.go`、`internal/service/user.go`、`internal/repository/user.go`、`internal/handler/user.go`。`internal/config/gorm.go` 加 `TranslateError: true`，让 `errors.Is(err, gorm.ErrDuplicatedKey)` 生效。端到端 curl 验证：注册成功 `201`、重复邮箱 `400`、登录密码正确 `200`、密码错误和邮箱不存在返回完全相同的 `400` + 错误信息。代码审查修复一处 bug：`Register` 里 `repo.Create` 失败时原先统一包成 `apperror.Internal`，丢掉了 repository 已翻译好的 `apperror.Validation`，并发重复邮箱注册会误判成 500，改用 `errors.As` 透传修复。`docs/api/todo-api.md` 补上两个接口的「已实现」条目。
+实现 TODO 完整 CRUD：`GET /api/v1/todos/:id`、`PUT /api/v1/todos/:id`、`DELETE /api/v1/todos/:id`（`internal/service/todo.go`、`internal/handler/todo.go`、`cmd/server/main.go`）。`:id` 解析（`strconv.ParseUint`）放在 handler，非法 id 返回 400。PUT 先 `FindByID` 判存在性，避免 `db.Save` 对不存在的 id upsert 出 ghost 记录（端到端实测 `PUT /todos/777` → 404 且未创建记录）。DELETE 采用**选择 B**：`repository.Delete` 签名改为 `(int64, error)` 返回 `RowsAffected`，service 靠 `RowsAffected == 0` 判 404，省去 find-then-delete 的一次查询。
+
+- **B3**：`FindByID`/`Update`/`Delete` 三个方法接上调用方；`CreateAndMarkDone`（Day 18 事务练习）仍无调用方，保留为示例，Day 27 收尾时再决定去留。
+- 代码审查修正：初版 `DeleteTodo` 把选择 A（`FindByID`）与选择 B（`RowsAffected`）混用，收敛到选择 B。
+- 教案/文档修正：DELETE 成功 body 因 `response.Body.Data` 的 `omitempty` 实际是 `{"message":"ok"}`，非 `{"data":null,...}`。
 
 
 
