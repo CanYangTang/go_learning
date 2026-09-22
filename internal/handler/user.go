@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/CanYangTang/go_learning/internal/auth"
 	"github.com/CanYangTang/go_learning/internal/middleware"
 	"github.com/CanYangTang/go_learning/internal/model"
 	"github.com/CanYangTang/go_learning/pkg/apperror"
@@ -27,6 +28,13 @@ type UserResponse struct {
 	Email string `json:"email"`
 }
 
+// LoginResponse is UserResponse plus the freshly minted JWT.
+type LoginResponse struct {
+	ID    uint   `json:"id"`
+	Email string `json:"email"`
+	Token string `json:"token"`
+}
+
 // RegisterRequest represents the request body for POST /api/v1/users/register.
 type RegisterRequest struct {
 	Email    string `json:"email" binding:"required"`
@@ -42,22 +50,16 @@ type LoginRequest struct {
 // UserHandler handles user-related HTTP requests.
 type UserHandler struct {
 	service UserService
+	tokens  *auth.Manager
 }
 
-// NewUserHandler creates a new UserHandler.
-func NewUserHandler(service UserService) *UserHandler {
-	return &UserHandler{service: service}
+// NewUserHandler creates a new UserHandler. The token manager is used by Login
+// to mint a JWT on success.
+func NewUserHandler(service UserService, tokens *auth.Manager) *UserHandler {
+	return &UserHandler{service: service, tokens: tokens}
 }
 
 // Register handles POST /api/v1/users/register.
-//
-// TODO: implement, following CreateTodo's shape in todo.go:
-//   - c.ShouldBindJSON(&req); on error, log.Printf with
-//     middleware.RequestIDFromContext(c) and the raw err, then
-//     writeError(c, apperror.Validation("invalid request body")) and return.
-//   - Call h.service.Register(req.Email, req.Password); on error, writeError(c, err).
-//   - On success, c.JSON(http.StatusCreated, response.Body{
-//     Data: UserResponse{ID: user.ID, Email: user.Email}, Message: "ok"}).
 func (h *UserHandler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -78,11 +80,8 @@ func (h *UserHandler) Register(c *gin.Context) {
 	})
 }
 
-// Login handles POST /api/v1/users/login.
-//
-// TODO: implement, same shape as Register but calling h.service.Login and
-// responding with http.StatusOK instead of http.StatusCreated. No token is
-// issued yet - that lands in Day 25 with JWT.
+// Login handles POST /api/v1/users/login. On success it mints a JWT and
+// returns it in the response body alongside the user's id and email.
 func (h *UserHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -90,13 +89,22 @@ func (h *UserHandler) Login(c *gin.Context) {
 		writeError(c, apperror.Validation("invalid request body"))
 		return
 	}
+
 	user, err := h.service.Login(req.Email, req.Password)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
+
+	token, err := h.tokens.Generate(user.ID)
+	if err != nil {
+		log.Printf("request_id=%s token_error=%v", middleware.RequestIDFromContext(c), err)
+		writeError(c, apperror.Internal("login failed"))
+		return
+	}
+
 	c.JSON(http.StatusOK, response.Body{
-		Data:    UserResponse{ID: user.ID, Email: user.Email},
+		Data:    LoginResponse{ID: user.ID, Email: user.Email, Token: token},
 		Message: "ok",
 	})
 }

@@ -25,13 +25,15 @@ func newFullRouter(t *testing.T) *gin.Engine {
 		middleware.RequestID(),
 		middleware.Logging(),
 		middleware.Recovery(),
-		middleware.CORS(),
-		middleware.AuthPlaceholder(),
+		middleware.CORS([]string{corsTestOrigin}),
 	)
 	router.GET("/api/v1/health", HealthHandler)
 	router.NoRoute(NotFoundHandler)
 	return router
 }
+
+// corsTestOrigin is a whitelisted origin used to prove CORS headers reach a 404.
+const corsTestOrigin = "http://localhost:3000"
 
 // silenceLog keeps the access log out of the test output.
 func silenceLog(t *testing.T) {
@@ -87,7 +89,10 @@ func TestNotFoundHandlesBareHealthPath(t *testing.T) {
 func TestNotFoundResponseCarriesRequestIDAndCORSHeaders(t *testing.T) {
 	router := newFullRouter(t)
 
-	recorder := get(t, router, "/api/v1/nope")
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/nope", nil)
+	req.Header.Set("Origin", corsTestOrigin) // whitelisted, so ACAO is echoed
+	router.ServeHTTP(recorder, req)
 
 	if got := strings.TrimSpace(recorder.Header().Get(middleware.RequestIDHeader)); got == "" {
 		t.Fatalf("expected %s on a 404 response", middleware.RequestIDHeader)

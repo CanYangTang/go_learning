@@ -28,3 +28,8 @@ func Validation(message string) Error {
 func NotFound(message string) Error {
 	return New("NOT_FOUND", message, http.StatusNotFound)
 }
+
+// Unauthorized builds the error returned for a missing or invalid credential.
+func Unauthorized(message string) Error {
+	return New("UNAUTHORIZED", message, http.StatusUnauthorized)
+}

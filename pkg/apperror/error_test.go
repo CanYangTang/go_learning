@@ -33,6 +33,7 @@ func TestConstructorsUseExpectedCodeAndStatus(t *testing.T) {
 		{"validation", Validation("bad input"), "VALIDATION_ERROR", http.StatusBadRequest},
 		{"internal", Internal("boom"), "INTERNAL_ERROR", http.StatusInternalServerError},
 		{"notfound", NotFound("missing"), "NOT_FOUND", http.StatusNotFound},
+		{"unauthorized", Unauthorized("nope"), "UNAUTHORIZED", http.StatusUnauthorized},
 	}
 
 	for _, tc := range cases {

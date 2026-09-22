@@ -3,7 +3,9 @@ package main
 import (
 	"log"
 	"os"
+	"time"
 
+	"github.com/CanYangTang/go_learning/internal/auth"
 	"github.com/CanYangTang/go_learning/internal/config"
 	"github.com/CanYangTang/go_learning/internal/handler"
 	"github.com/CanYangTang/go_learning/internal/middleware"
@@ -30,29 +32,42 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// The signing key comes from JWT_SECRET (dev default otherwise). Tokens are
+	// valid for 24h. Never log the secret.
+	tokenManager := auth.NewManager([]byte(config.JWTSecret()), 24*time.Hour)
+
 	todoRepo := repository.NewTodoRepository(db)
 	todoService := service.NewTodoService(todoRepo)
 	todoHandler := handler.NewTodoHandler(todoService)
 
 	userRepo := repository.NewUserRepository(db)
 	userService := service.NewUserService(userRepo)
-	userHandler := handler.NewUserHandler(userService)
+	userHandler := handler.NewUserHandler(userService, tokenManager)
 
 	router := gin.New()
 	// Recovery sits after Logging so a recovered panic still produces an access
 	// log line, and before CORS so the 500 keeps its cross-origin headers.
-	router.Use(middleware.RequestID(), middleware.Logging(), middleware.Recovery(), middleware.CORS(), middleware.AuthPlaceholder())
+	// Auth is NOT global: it is mounted on the protected group below so that
+	// /health, /users/register and /users/login stay public (backlog A6).
+	router.Use(middleware.RequestID(), middleware.Logging(), middleware.Recovery(), middleware.CORS(config.AllowedOrigins()))
 
 	v1 := router.Group("/api/v1")
 	{
+		// Public: no token required.
 		v1.GET("/health", handler.HealthHandler)
-		v1.POST("/todos", todoHandler.CreateTodo)
-		v1.GET("/todos", todoHandler.ListTodos)
-		v1.GET("/todos/:id", todoHandler.GetTodo)
-		v1.PUT("/todos/:id", todoHandler.UpdateTodo)
-		v1.DELETE("/todos/:id", todoHandler.DeleteTodo)
 		v1.POST("/users/register", userHandler.Register)
 		v1.POST("/users/login", userHandler.Login)
+
+		// Protected: a valid Bearer token is required.
+		protected := v1.Group("")
+		protected.Use(middleware.RequireAuth(tokenManager))
+		{
+			protected.POST("/todos", todoHandler.CreateTodo)
+			protected.GET("/todos", todoHandler.ListTodos)
+			protected.GET("/todos/:id", todoHandler.GetTodo)
+			protected.PUT("/todos/:id", todoHandler.UpdateTodo)
+			protected.DELETE("/todos/:id", todoHandler.DeleteTodo)
+		}
 	}
 
 	router.NoRoute(handler.NotFoundHandler)

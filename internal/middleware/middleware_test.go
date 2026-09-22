@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/CanYangTang/go_learning/internal/auth"
 	"github.com/gin-gonic/gin"
 )
 
@@ -118,7 +120,7 @@ func TestCORSMiddlewareHandlesPreflight(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	router := gin.New()
-	router.Use(CORS())
+	router.Use(CORS([]string{"http://example.com"}))
 	router.GET("/ping", func(c *gin.Context) {
 		c.String(http.StatusOK, "pong")
 	})
@@ -147,25 +149,122 @@ func TestCORSMiddlewareHandlesPreflight(t *testing.T) {
 	}
 }
 
-func TestAuthPlaceholderPassesThrough(t *testing.T) {
+func TestCORSMiddlewareAllowsWhitelistedOrigin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	router := gin.New()
-	router.Use(AuthPlaceholder())
+	router.Use(CORS([]string{"http://good.com", "http://also-good.com"}))
+	router.GET("/ping", func(c *gin.Context) { c.String(http.StatusOK, "pong") })
+
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req.Header.Set("Origin", "http://good.com")
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "http://good.com" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want %q", got, "http://good.com")
+	}
+}
+
+func TestCORSMiddlewareRejectsUnlistedOrigin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	router.Use(CORS([]string{"http://good.com"}))
+	router.GET("/ping", func(c *gin.Context) { c.String(http.StatusOK, "pong") })
+
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req.Header.Set("Origin", "http://evil.com")
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	// The request still runs, but no ACAO header means the browser blocks the
+	// cross-origin read.
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want empty for an unlisted origin", got)
+	}
+}
+
+func newAuthTestRouter(m *auth.Manager) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(RequestID(), RequireAuth(m))
 	router.GET("/ping", func(c *gin.Context) {
-		c.String(http.StatusOK, "pong")
+		id, _ := UserIDFromContext(c)
+		c.JSON(http.StatusOK, gin.H{"user_id": id})
 	})
+	return router
+}
+
+func TestRequireAuthRejectsMissingHeader(t *testing.T) {
+	m := auth.NewManager([]byte("test-secret"), time.Hour)
+	router := newAuthTestRouter(m)
 
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
 	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
 
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+	}
+	if !strings.Contains(recorder.Body.String(), `"code":"UNAUTHORIZED"`) {
+		t.Fatalf("body = %q, want UNAUTHORIZED envelope", recorder.Body.String())
+	}
+}
+
+func TestRequireAuthRejectsMalformedHeader(t *testing.T) {
+	m := auth.NewManager([]byte("test-secret"), time.Hour)
+	router := newAuthTestRouter(m)
+
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req.Header.Set("Authorization", "Basic abc123") // not Bearer
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestRequireAuthRejectsInvalidToken(t *testing.T) {
+	m := auth.NewManager([]byte("test-secret"), time.Hour)
+	router := newAuthTestRouter(m)
+
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req.Header.Set("Authorization", "Bearer not.a.real.token")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+	}
+	// The raw parse error must not leak to the client.
+	if strings.Contains(recorder.Body.String(), "token is malformed") {
+		t.Fatalf("body leaked the raw parse error: %s", recorder.Body.String())
+	}
+}
+
+func TestRequireAuthAcceptsValidToken(t *testing.T) {
+	m := auth.NewManager([]byte("test-secret"), time.Hour)
+	router := newAuthTestRouter(m)
+
+	token, err := m.Generate(7)
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
 	}
-
-	if body := recorder.Body.String(); body != "pong" {
-		t.Fatalf("body = %q, want %q", body, "pong")
+	// RequireAuth must expose the authenticated user id downstream.
+	if !strings.Contains(recorder.Body.String(), `"user_id":7`) {
+		t.Fatalf("body = %q, want user_id 7 from context", recorder.Body.String())
 	}
 }

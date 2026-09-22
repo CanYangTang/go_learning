@@ -21,7 +21,7 @@ import (
 // gets an access log line. Mounting it outside Logging returns a 500 but leaves
 // no access log line at all.
 //
-//	router.Use(RequestID(), Logging(), Recovery(), CORS(), AuthPlaceholder())
+//	router.Use(RequestID(), Logging(), Recovery(), CORS(allowedOrigins))
 //
 // handler.writeError is unexported and in another package, so the envelope is
 // rebuilt here from pkg/response - the shape stays shared, the helper does not.

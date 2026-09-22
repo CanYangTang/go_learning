@@ -5,7 +5,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/CanYangTang/go_learning/internal/auth"
 	"github.com/CanYangTang/go_learning/internal/model"
 	"github.com/CanYangTang/go_learning/pkg/apperror"
 	"github.com/gin-gonic/gin"
@@ -47,7 +49,8 @@ func (f *fakeUserService) Login(email, password string) (*model.User, error) {
 func newUserRouter(svc UserService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 
-	h := NewUserHandler(svc)
+	tokens := auth.NewManager([]byte("test-secret"), time.Hour)
+	h := NewUserHandler(svc, tokens)
 	router := gin.New()
 	router.POST("/api/v1/users/register", h.Register)
 	router.POST("/api/v1/users/login", h.Login)
@@ -165,8 +168,9 @@ func TestLoginSuccess(t *testing.T) {
 	if strings.Contains(recorder.Body.String(), "shouldneverleak") {
 		t.Fatalf("response leaked the password hash: %s", recorder.Body.String())
 	}
-	if strings.Contains(recorder.Body.String(), "token") {
-		t.Fatalf("no token should be issued until Day 25 (JWT): %s", recorder.Body.String())
+	// Day 25: login now issues a JWT in the response body.
+	if !strings.Contains(recorder.Body.String(), `"token":`) {
+		t.Fatalf("login response should include a token: %s", recorder.Body.String())
 	}
 }
 

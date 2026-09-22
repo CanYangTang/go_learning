@@ -5,14 +5,14 @@
 > - **已实现**：当前 `main` 分支上真实跑得通的接口，示例响应都是从运行中的服务上抓下来的。改代码时必须同步改这一节。
 > - **计划中**：设计意图，尚未落地。不要照着它写客户端。
 >
-> 最后核对：2026-09-20（Day 24，逐条 curl 验证）
+> 最后核对：2026-09-22（Day 25，逐条 curl 验证）
 
 ## 基础信息
 
 - Base URL：`http://localhost:8080`
 - API Prefix：`/api/v1`
 - 依赖：MySQL（启动方式见 README 的「本地启动」）
-- 认证：**当前没有**。`AuthPlaceholder` 中间件已挂在全局，但不做任何校验，所有接口都是公开的。JWT 在 Day 25 实现，`register`/`login` 现在也不发 token。
+- 认证：**JWT（Day 25 起）**。`login` 成功返回 `token`（HS256，默认 24h 过期）；`/todos` 全部接口需要带 `Authorization: Bearer <token>`，缺失/非法/过期一律 `401`。公开接口：`GET /health`、`POST /users/register`、`POST /users/login`。签名密钥来自 `JWT_SECRET` 环境变量（未设置时用 dev 兜底，仅限本地）。**尚未按 `user_id` 隔离数据**——所有登录用户共享同一份 todos（`Todo.UserID` 留后续）。
 
 ## 全局约定
 
@@ -39,7 +39,7 @@
 | Header | 说明 |
 |--------|------|
 | `X-Request-Id` | 请求 ID。客户端可以自己传 `X-Request-ID`，服务端原样保留；不传则生成一个 32 位十六进制串。排查问题时把它给到服务端就能定位日志行 |
-| `Access-Control-Allow-Origin` | 当前**回显请求的 `Origin`**，没有白名单（`docs/issues-backlog.md` A5） |
+| `Access-Control-Allow-Origin` | 仅当请求 `Origin` 在白名单（`CORS_ALLOWED_ORIGINS`，默认 `http://localhost:3000`）内时回显该 Origin；否则不设置该头（`docs/issues-backlog.md` A5，Day 25 收紧） |
 | `Access-Control-Allow-Methods` | `GET,POST,PUT,PATCH,DELETE,OPTIONS` |
 | `Access-Control-Allow-Headers` | `Origin, Content-Type, Accept, Authorization, X-Request-ID` |
 | `Access-Control-Expose-Headers` | `X-Request-ID` |
@@ -54,6 +54,20 @@
 ---
 
 # 一、已实现
+
+> **认证边界**：下面的 `/todos` 四个接口都需要 `Authorization: Bearer <token>`；`GET /health`、`POST /users/register`、`POST /users/login` 公开。
+>
+> 受保护接口在缺失/格式错误的 Authorization 头时返回 `401`：
+>
+> ```json
+> { "error": { "code": "UNAUTHORIZED", "message": "missing or malformed authorization header" } }
+> ```
+>
+> token 非法/过期/签名错时返回 `401`（原因只写日志，客户端只收笼统文案）：
+>
+> ```json
+> { "error": { "code": "UNAUTHORIZED", "message": "invalid or expired token" } }
+> ```
 
 ## GET /api/v1/health
 
@@ -270,12 +284,16 @@ panic 值和调用栈只写日志，按 `request_id` 关联。
 
 ```json
 {
-  "data": { "id": 1, "email": "a@example.com" },
+  "data": {
+    "id": 1,
+    "email": "a@example.com",
+    "token": "eyJhbGciOiJIUzI1Ni...<省略>...sJ9.abc123"
+  },
   "message": "ok"
 }
 ```
 
-不发 token——Day 25 JWT 落地后才会在 `data` 里加 `token` 字段。
+`token` 是 HS256 签名的 JWT，默认 24h 过期，`sub` 是 userID。带上 `Authorization: Bearer <token>` 访问 `/todos` 即可。
 
 失败 `400`：
 
@@ -298,7 +316,7 @@ panic 值和调用栈只写日志，按 `request_id` 关联。
 
 ## 用户接口鉴权（Day 25）
 
-`register`/`login` 已在 Day 23 实现（见上）。Day 25 会在 `login` 成功响应里加 `token` 字段，TODO 接口需要带 `Authorization: Bearer <token>`，并按 `user_id` 隔离数据。
+`register`/`login` 已在 Day 23 实现，JWT 鉴权已在 Day 25 落地（见「已实现」：`login` 返回 `token`，`/todos` 需 Bearer）。**仍未做**的是按 `user_id` 隔离数据——当前所有登录用户共享同一份 todos，`Todo.UserID` 留后续。届时 `RequireAuth` 已把 `user_id` 存进 context（`middleware.UserIDFromContext`），service/repository 按它过滤即可。
 
 ## TODO 接口补全（Day 22-24）
 
@@ -336,6 +354,6 @@ panic 值和调用栈只写日志，按 `request_id` 关联。
 | `VALIDATION_ERROR` | 400 | 已实现 |
 | `NOT_FOUND` | 404 | 已实现 |
 | `INTERNAL_ERROR` | 500 | 已实现 |
-| `UNAUTHORIZED` | 401 | 计划中（Day 25） |
-| `FORBIDDEN` | 403 | 计划中（Day 25） |
+| `UNAUTHORIZED` | 401 | 已实现（Day 25） |
+| `FORBIDDEN` | 403 | 计划中（按 user_id 隔离后） |
 

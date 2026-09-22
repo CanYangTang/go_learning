@@ -14,8 +14,8 @@ Day 21（2026-09-03）对整个项目做了一次全量审计，本文件是结�
 | A2 | `NoRoute` 的 404 响应形状与统一信封不一致 | P1 | 21 | 已修 (Day 21) |
 | A3 | 绑定失败把 validator 原文和 Go 类型名回给客户端 | P1 | 21 | 已修 (Day 21) |
 | A4 | 连接池参数 `MaxOpenConns`/`MaxIdleConns` 从未生效 | P2 | 26 | 待修 |
-| A5 | CORS 反射任意 `Origin`，无白名单 | P2 | 25 前置 | 待修 |
-| A6 | `AuthPlaceholder` 挂在全局，JWT 落地会保护掉 health | P2 | 25 | 待修 |
+| A5 | CORS 反射任意 `Origin`，无白名单 | P2 | 25 前置 | 已修 (Day 25) |
+| A6 | `AuthPlaceholder` 挂在全局，JWT 落地会保护掉 health | P2 | 25 | 已修 (Day 25) |
 | A7 | health 响应不走统一信封（项目里共 4 种响应形状） | P3 | 21 决策 | 已决策 (Day 21) |
 | B1 | `database/sql` 整条路径已成死代码 | P3 | 26 | 待修 |
 | B2 | `pkg/response` 四个函数零调用，`GinJSON`/`GinError` 模式错误 | P3 | 24 | 待修 |
@@ -229,6 +229,26 @@ Day 21 的第一件事就是补这个，关键检查是重启服务后数据还�
 - **B3**：`FindByID`/`Update`/`Delete` 三个方法接上调用方；`CreateAndMarkDone`（Day 18 事务练习）仍无调用方，保留为示例，Day 27 收尾时再决定去留。
 - 代码审查修正：初版 `DeleteTodo` 把选择 A（`FindByID`）与选择 B（`RowsAffected`）混用，收敛到选择 B。
 - 教案/文档修正：DELETE 成功 body 因 `response.Body.Data` 的 `omitempty` 实际是 `{"message":"ok"}`，非 `{"data":null,...}`。
+
+### Day 25（2026-09-22）
+
+落地 JWT 鉴权（范围决策：**只做鉴权，不做按用户隔离 TODO**，`Todo.UserID` 继续留后续）。
+
+| 编号 | 结果 | 落地位置 |
+|------|------|----------|
+| A5 | CORS 由「反射任意 Origin」收紧为白名单：仅对 `CORS_ALLOWED_ORIGINS`（默认 `http://localhost:3000`）内的 Origin 回显 ACAO，补上 `Access-Control-Max-Age: 600` 和 `Vary: Origin` | `internal/middleware/cors.go`、`internal/config/env.go` 的 `AllowedOrigins()`、`middleware_test.go` |
+| A6 | `AuthPlaceholder` 删除，改为 `RequireAuth(*auth.Manager)` 挂在受保护路由子组 `v1.Group("")` 上；`/health`、`/users/register`、`/users/login` 留在 `v1` 保持公开，5 条 `/todos` 进子组 | `cmd/server/main.go`、`internal/middleware/auth.go` |
+
+新增能力（非 backlog 条目）：
+
+- 新包 `internal/auth`：`Manager.Generate/Parse`（HS256，`RegisteredClaims.Subject` 存 userID，含过期校验；keyfunc 断言 HMAC 方法，堵死 alg=none / 算法混淆）。
+- `pkg/apperror` 新增 `Unauthorized`（UNAUTHORIZED/401）。
+- `RequireAuth` 的原始解析错误只按 `request_id` 写日志，客户端统一收笼统 401（与 A3「绑定错误不外泄」同一条安全原则）。
+- `login` 成功返回 `token`（`LoginResponse{id,email,token}`）。
+- `internal/config/env.go`：`JWTSecret()`（`JWT_SECRET` env + dev 兜底，**secret 从不打印**）、`AllowedOrigins()`。
+- `go.mod`：`golang-jwt/jwt/v5 v5.3.1` 由 `// indirect` 提升为直接依赖。
+
+顺带（C6 同类清理）：本次涉及函数上方已完成的 `// TODO: implement` 脚手架注释一并删除（token.go/auth.go/cors.go/user.go）。`todo.go`/`repository/user.go`/`service/user.go`/`service/todo.go` 里早几天遗留的同类注释仍在，待 Day 27 工程收尾统一清。
 
 
 
