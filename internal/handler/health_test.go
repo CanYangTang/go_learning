@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -43,7 +44,7 @@ func TestHealthHandler(t *testing.T) {
 	// Verify JSON contains expected fields
 	expectedFields := []string{`"status":"ok"`, `"service":"go-learning"`, `"version":"0.1.0"`}
 	for _, field := range expectedFields {
-		if !containsString(body, field) {
+		if !strings.Contains(body, field) {
 			t.Fatalf("response body %q does not contain %q", body, field)
 		}
 	}
@@ -63,18 +64,4 @@ func TestHealthHandlerMethodNotAllowed(t *testing.T) {
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNotFound)
 	}
-}
-
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

@@ -15,6 +15,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Compile-time proof that each concrete type satisfies the consumer-declared
+// interface it is injected into below. These bindings are also enforced at the
+// wiring calls, but stating them here keeps the layer contract from silently
+// breaking if a signature drifts.
+var (
+	_ service.TodoRepository = (*repository.TodoRepository)(nil)
+	_ service.UserRepository = (*repository.UserRepository)(nil)
+	_ handler.TodoService    = (*service.TodoService)(nil)
+	_ handler.UserService    = (*service.UserService)(nil)
+)
+
 func main() {
 	gin.SetMode(gin.ReleaseMode)
 

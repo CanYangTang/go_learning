@@ -18,13 +18,13 @@ Day 21（2026-09-03）对整个项目做了一次全量审计，本文件是结�
 | A6 | `AuthPlaceholder` 挂在全局，JWT 落地会保护掉 health | P2 | 25 | 已修 (Day 25) |
 | A7 | health 响应不走统一信封（项目里共 4 种响应形状） | P3 | 21 决策 | 已决策 (Day 21) |
 | B1 | `database/sql` 整条路径已成死代码 | P3 | 26 | 待修 |
-| B2 | `pkg/response` 四个函数零调用，`GinJSON`/`GinError` 模式错误 | P3 | 24 | 待修 |
+| B2 | `pkg/response` 四个函数零调用，`GinJSON`/`GinError` 模式错误 | P3 | 24 | 已修 (Day 26) |
 | B3 | repository 四个方法无调用方 | P3 | 24 | 部分已修 (Day 24) |
-| B4 | `health_test.go` 手写了 `strings.Contains` | P3 | 27 | 待修 |
+| B4 | `health_test.go` 手写了 `strings.Contains` | P3 | 27 | 已修 (Day 26) |
 | C1 | `go.mod` 未 tidy，四个直接依赖被标成 `// indirect` | P2 | 21 | 已修 (Day 21) |
 | C2 | 迁移脚本与模型不一致，且从未被执行 | P2 | 22 | 已修 (Day 22) |
 | C3 | `make test` 无 `-count=1`；`fmt` 管不了 import 分组；无 lint | P2 | 27 | 待修 |
-| C4 | `pkg/apperror`、`pkg/response` 无测试 | P3 | 21 / 24 | 部分已修 (Day 21) |
+| C4 | `pkg/apperror`、`pkg/response` 无测试 | P3 | 21 / 24 | 已修 (Day 21 apperror / Day 26 response) |
 | C5 | 集成测试硬编码 DSN，teardown 会 `DROP TABLE` | P2 | 22 | 待修 |
 | C6 | `week02-core` 里残留 8 处 `// TODO: implement` 脚手架注释 | P3 | 27 | 待修 |
 | D1 | `docs/api/todo-api.md` 描述了 7 个不存在的接口，6 处形状不符 | P1 | 21 | 已修 (Day 21) |

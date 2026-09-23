@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -63,25 +62,25 @@ func (h *TodoHandler) CreateTodo(c *gin.Context) {
 		// act on. Keep it server-side, keyed by request ID so a client-reported
 		// 400 can still be traced, and send a fixed message instead.
 		log.Printf("request_id=%s bind_error=%v", middleware.RequestIDFromContext(c), err)
-		writeError(c, apperror.Validation("invalid request body: title is required"))
+		response.WriteError(c, apperror.Validation("invalid request body: title is required"))
 		return
 	}
 
 	// Pass the raw title through - trimming is the service's job.
 	todo, err := h.service.CreateTodo(req.Title)
 	if err != nil {
-		writeError(c, err)
+		response.WriteError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusCreated, response.Body{Data: newTodoResponse(*todo), Message: "ok"})
+	response.WriteSuccess(c, http.StatusCreated, newTodoResponse(*todo))
 }
 
 // ListTodos handles GET /api/v1/todos.
 func (h *TodoHandler) ListTodos(c *gin.Context) {
 	todos, err := h.service.ListTodos()
 	if err != nil {
-		writeError(c, err)
+		response.WriteError(c, err)
 		return
 	}
 
@@ -91,7 +90,7 @@ func (h *TodoHandler) ListTodos(c *gin.Context) {
 		items = append(items, newTodoResponse(todo))
 	}
 
-	c.JSON(http.StatusOK, response.Body{Data: items, Message: "ok"})
+	response.WriteSuccess(c, http.StatusOK, items)
 }
 
 // newTodoResponse converts a domain model into the API response shape.
@@ -105,10 +104,6 @@ func newTodoResponse(todo model.Todo) Todo {
 
 // parseID converts a :id path segment into a uint.
 //
-// TODO: implement (remember to add "strconv" to the import block).
-//   - strconv.ParseUint(s, 10, 64); on error return 0, err.
-//   - Otherwise return uint(id), nil.
-//
 // Parsing lives in the handler because "how an id is expressed in a URL" is an
 // HTTP detail, not a business rule; the service only ever sees a clean uint.
 func parseID(s string) (uint, error) {
@@ -120,91 +115,59 @@ func parseID(s string) (uint, error) {
 }
 
 // GetTodo handles GET /api/v1/todos/:id.
-//
-// TODO: implement.
-//   - id, err := parseID(c.Param("id")); on error writeError(c, apperror.Validation("invalid id")) and return.
-//   - todo, err := h.service.GetTodo(id); on error writeError(c, err) and return.
-//   - On success: c.JSON(http.StatusOK, response.Body{Data: newTodoResponse(*todo), Message: "ok"}).
 func (h *TodoHandler) GetTodo(c *gin.Context) {
 	id, err := parseID(c.Param("id"))
 	if err != nil {
-		writeError(c, apperror.Validation("invalid id"))
+		response.WriteError(c, apperror.Validation("invalid id"))
 		return
 	}
 
 	todo, err := h.service.GetTodo(id)
 	if err != nil {
-		writeError(c, err)
+		response.WriteError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, response.Body{Data: newTodoResponse(*todo), Message: "ok"})
+	response.WriteSuccess(c, http.StatusOK, newTodoResponse(*todo))
 }
 
 // UpdateTodo handles PUT /api/v1/todos/:id.
-//
-// TODO: implement, following CreateTodo's bind pattern.
-//   - Parse id via parseID; bad id -> apperror.Validation("invalid id").
-//   - var req UpdateTodoRequest; c.ShouldBindJSON(&req); on error log with
-//     middleware.RequestIDFromContext(c) then writeError(c, apperror.Validation("invalid request body")).
-//   - todo, err := h.service.UpdateTodo(id, req.Title, req.Done); on error writeError(c, err).
-//   - On success: 200 with response.Body{Data: newTodoResponse(*todo), Message: "ok"}.
 func (h *TodoHandler) UpdateTodo(c *gin.Context) {
 	id, err := parseID(c.Param("id"))
 	if err != nil {
-		writeError(c, apperror.Validation("invalid id"))
+		response.WriteError(c, apperror.Validation("invalid id"))
 		return
 	}
 
 	var req UpdateTodoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Printf("request_id=%s bind_error=%v", middleware.RequestIDFromContext(c), err)
-		writeError(c, apperror.Validation("invalid request body"))
+		response.WriteError(c, apperror.Validation("invalid request body"))
 		return
 	}
 
 	todo, err := h.service.UpdateTodo(id, req.Title, req.Done)
 	if err != nil {
-		writeError(c, err)
+		response.WriteError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, response.Body{Data: newTodoResponse(*todo), Message: "ok"})
+	response.WriteSuccess(c, http.StatusOK, newTodoResponse(*todo))
 }
 
-// DeleteTodo handles DELETE /api/v1/todos/:id.
-//
-// TODO: implement.
-//   - Parse id via parseID; bad id -> apperror.Validation("invalid id").
-//   - err := h.service.DeleteTodo(id); on error writeError(c, err).
-//   - On success: c.JSON(http.StatusOK, response.Body{Data: nil, Message: "ok"}).
-//     (200 + envelope, not 204, to stay consistent with every other success response.)
+// DeleteTodo handles DELETE /api/v1/todos/:id. Success is 200 + envelope (not
+// 204), to stay consistent with every other success response.
 func (h *TodoHandler) DeleteTodo(c *gin.Context) {
 	id, err := parseID(c.Param("id"))
 	if err != nil {
-		writeError(c, apperror.Validation("invalid id"))
+		response.WriteError(c, apperror.Validation("invalid id"))
 		return
 	}
 
 	if err := h.service.DeleteTodo(id); err != nil {
-		writeError(c, err)
+		response.WriteError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, response.Body{Data: nil, Message: "ok"})
-}
-
-// writeError turns an error into the shared error response envelope.
-func writeError(c *gin.Context, err error) {
-	var appErr apperror.Error
-	if errors.As(err, &appErr) {
-		c.JSON(appErr.StatusCode, response.ErrorBody{
-			Error: response.ErrorPayload{Code: appErr.Code, Message: appErr.Message},
-		})
-		return
-	}
-
-	c.JSON(http.StatusInternalServerError, response.ErrorBody{
-		Error: response.ErrorPayload{Code: "INTERNAL_ERROR", Message: "internal server error"},
-	})
+	response.WriteSuccess(c, http.StatusOK, nil)
 }

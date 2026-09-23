@@ -64,20 +64,17 @@ func (h *UserHandler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Printf("request_id=%s bind_error=%v", middleware.RequestIDFromContext(c), err)
-		writeError(c, apperror.Validation("invalid request body"))
+		response.WriteError(c, apperror.Validation("invalid request body"))
 		return
 	}
 
 	user, err := h.service.Register(req.Email, req.Password)
 	if err != nil {
-		writeError(c, err)
+		response.WriteError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusCreated, response.Body{
-		Data:    UserResponse{ID: user.ID, Email: user.Email},
-		Message: "ok",
-	})
+	response.WriteSuccess(c, http.StatusCreated, UserResponse{ID: user.ID, Email: user.Email})
 }
 
 // Login handles POST /api/v1/users/login. On success it mints a JWT and
@@ -86,25 +83,22 @@ func (h *UserHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Printf("request_id=%s bind_error=%v", middleware.RequestIDFromContext(c), err)
-		writeError(c, apperror.Validation("invalid request body"))
+		response.WriteError(c, apperror.Validation("invalid request body"))
 		return
 	}
 
 	user, err := h.service.Login(req.Email, req.Password)
 	if err != nil {
-		writeError(c, err)
+		response.WriteError(c, err)
 		return
 	}
 
 	token, err := h.tokens.Generate(user.ID)
 	if err != nil {
 		log.Printf("request_id=%s token_error=%v", middleware.RequestIDFromContext(c), err)
-		writeError(c, apperror.Internal("login failed"))
+		response.WriteError(c, apperror.Internal("login failed"))
 		return
 	}
 
-	c.JSON(http.StatusOK, response.Body{
-		Data:    LoginResponse{ID: user.ID, Email: user.Email, Token: token},
-		Message: "ok",
-	})
+	response.WriteSuccess(c, http.StatusOK, LoginResponse{ID: user.ID, Email: user.Email, Token: token})
 }

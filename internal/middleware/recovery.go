@@ -23,8 +23,8 @@ import (
 //
 //	router.Use(RequestID(), Logging(), Recovery(), CORS(allowedOrigins))
 //
-// handler.writeError is unexported and in another package, so the envelope is
-// rebuilt here from pkg/response - the shape stays shared, the helper does not.
+// The 500 is written through response.WriteError - the single error exit shared
+// by handlers and middleware.
 func Recovery() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
@@ -38,10 +38,7 @@ func Recovery() gin.HandlerFunc {
 			// request ID so the access log line can be matched - never to the client.
 			log.Printf("request_id=%s panic=%v\n%s", RequestIDFromContext(c), recovered, debug.Stack())
 
-			appErr := apperror.Internal("internal server error")
-			c.AbortWithStatusJSON(appErr.StatusCode, response.ErrorBody{
-				Error: response.ErrorPayload{Code: appErr.Code, Message: appErr.Message},
-			})
+			response.WriteError(c, apperror.Internal("internal server error"))
 		}()
 
 		c.Next()

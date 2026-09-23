@@ -22,7 +22,7 @@ func RequireAuth(m *auth.Manager) gin.HandlerFunc {
 		header := c.GetHeader("Authorization")
 		token, ok := bearerToken(header)
 		if !ok {
-			writeUnauthorized(c, "missing or malformed authorization header")
+			response.WriteError(c, apperror.Unauthorized("missing or malformed authorization header"))
 			return
 		}
 
@@ -30,7 +30,7 @@ func RequireAuth(m *auth.Manager) gin.HandlerFunc {
 		if err != nil {
 			// 原始错误（过期/签名错/格式错）只写日志，不回给客户端。
 			log.Printf("request_id=%s auth_error=%v", RequestIDFromContext(c), err)
-			writeUnauthorized(c, "invalid or expired token")
+			response.WriteError(c, apperror.Unauthorized("invalid or expired token"))
 			return
 		}
 
@@ -48,16 +48,6 @@ func bearerToken(header string) (string, bool) {
 		return "", false
 	}
 	return strings.TrimSpace(header[len(prefix):]), true
-}
-
-// writeUnauthorized writes a 401 using the shared error envelope. handler.writeError
-// is unexported and importing handler here would cycle, so the envelope is rebuilt
-// from pkg/response — same as Recovery does.
-func writeUnauthorized(c *gin.Context, message string) {
-	appErr := apperror.Unauthorized(message)
-	c.AbortWithStatusJSON(appErr.StatusCode, response.ErrorBody{
-		Error: response.ErrorPayload{Code: appErr.Code, Message: appErr.Message},
-	})
 }
 
 // UserIDFromContext returns the authenticated user id set by RequireAuth.
