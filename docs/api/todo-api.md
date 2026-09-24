@@ -5,7 +5,57 @@
 > - **已实现**：当前 `main` 分支上真实跑得通的接口，示例响应都是从运行中的服务上抓下来的。改代码时必须同步改这一节。
 > - **计划中**：设计意图，尚未落地。不要照着它写客户端。
 >
-> 最后核对：2026-09-22（Day 25，逐条 curl 验证）
+> 最后核对：2026-09-23（Day 27，逐条 curl 实抓验证）
+
+## 快速上手（可直接粘贴的 curl）
+
+下面这串命令跑一遍就走完了「注册 → 登录拿 token → 增删改查」全流程。`token` 用 shell 变量提取，**不要把真实 token 写进脚本或文档**。
+
+```bash
+BASE=http://localhost:8080/api/v1
+
+# 1. 健康检查（公开，注意看响应头里的 X-Request-Id）
+curl -i "$BASE/health"
+
+# 2. 注册（公开）-> 201
+curl -X POST "$BASE/users/register" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"a@example.com","password":"hunter2"}'
+
+# 3. 登录（公开）-> 200，把返回的 token 存进变量
+TOKEN=$(curl -s -X POST "$BASE/users/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"a@example.com","password":"hunter2"}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["token"])')
+
+# 4. 创建 todo（需鉴权）-> 201
+curl -X POST "$BASE/todos" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"learn go"}'
+
+# 5. 列表 -> 200
+curl "$BASE/todos" -H "Authorization: Bearer $TOKEN"
+
+# 6. 查单个 -> 200
+curl "$BASE/todos/1" -H "Authorization: Bearer $TOKEN"
+
+# 7. 全量更新 -> 200
+curl -X PUT "$BASE/todos/1" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"learn go","done":true}'
+
+# 8. 删除 -> 200，响应体是 {"message":"ok"}（无 data 字段）
+curl -X DELETE "$BASE/todos/1" -H "Authorization: Bearer $TOKEN"
+```
+
+不带 token 访问 `/todos` 会拿到 `401`：
+
+```bash
+curl -i "$BASE/todos"        # -> 401 {"error":{"code":"UNAUTHORIZED",...}}
+```
+
 
 ## 基础信息
 
